@@ -1,0 +1,61 @@
+#!/bin/sh
+#PBS -N 4713-0NP-32
+
+#PBS -P 13001327
+#PBS -m bea
+#PBS -M j.wallace2@liverpool.ac.uk
+
+# ask for x chunks of 24 cores, flat MPI (48 processes in total)
+# ask for x chunks of 24 cores, each running 12 MPI processes with 2 threads each: x x(12 MPI x 2 OMP)
+#PBS -l select=32:ncpus=24:mpiprocs=12:ompthreads=2:mem=64gb
+
+# modify for required runtime
+#PBS -l walltime=24:00:00
+
+# Send standard output and standard error to same output file
+#PBS -j oe
+
+# load default module environment for Gromacs (MPI+OpenMP)
+module load gromacs
+
+# NOTE: to run in parallel use "mdrun_mpi" which has MPI support rather than "gmx mdrun" which is serial
+
+# change directory into the directory where the job was submitted
+cd "$PBS_O_WORKDIR"
+
+#ddx=12
+#ddy=4
+#ddz=8
+
+export I_MPI_DEBUG=4
+##bind threads to cores
+#export KMP_AFFINITY=compact
+
+# run the executable
+inputmdp=em.mdp
+outputtpr=em
+inputgro=1hqjEC_solv.gro
+inputcpt=
+gmx grompp     -p topol.top -f $inputmdp -o $outputtpr -c $inputgro
+mpirun mdrun_mpi -pin on -ntomp $OMP_NUM_THREADS -v -deffnm $outputtpr  > stdout.$PBS_JOBID
+
+inputmdp=nvt.mdp
+outputtpr=nvt
+inputgro=em.gro
+inputcpt=
+gmx grompp     -p topol.top -f $inputmdp -o $outputtpr -c $inputgro
+mpirun mdrun_mpi -pin on -ntomp $OMP_NUM_THREADS -v -deffnm $outputtpr > stdout.$PBS_JOBID
+
+inputmdp=npt.mdp
+outputtpr=npt
+inputgro=nvt.gro
+inputcpt=nvt.cpt
+gmx grompp     -p topol.top -f $inputmdp -o $outputtpr -c $inputgro -t $inputcpt
+mpirun mdrun_mpi -pin on -ntomp $OMP_NUM_THREADS -v -deffnm $outputtpr > stdout.$PBS_JOBID
+                                                                                                                                     
+inputmdp=md.mdp
+outputtpr=md
+inputgro=npt.gro
+inputcpt=npt.cpt
+gmx grompp     -p topol.top -f $inputmdp -o $outputtpr -c $inputgro -t $inputcpt
+mpirun mdrun_mpi -pin on -ntomp $OMP_NUM_THREADS -v -deffnm $outputtpr > stdout.$PBS_JOBID
