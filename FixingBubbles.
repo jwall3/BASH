@@ -1,0 +1,97 @@
+#!/bin/sh
+
+#PBS -N DEVOLP
+
+#PBS -P 13001327
+#PBS -m bea
+#PBS -M j.wallace2@liverpool.ac.uk
+
+# ask for x chunks of 24 cores, flat MPI (48 processes in total)
+# ask for x chunks of 24 cores, each running 12 MPI processes with 2 threads each: x x(12 MPI x 2 OMP)
+#PBS -l select=2:ncpus=24
+
+# modify for required runtime
+#PBS -l walltime=2:00:00
+
+# Send standard output and standard error to same output file
+#PBS -j oe
+
+# load default module environment for Gromacs (MPI+OpenMP)
+module load gromacs
+
+# NOTE: to run in parallel use "mdrun_mpi" which has MPI support rather than "gmx mdrun" which is serial
+
+# change directory into the directory where the job was submitted
+cd "$PBS_O_WORKDIR"
+
+ddx=1
+ddy=1
+ddz=1
+
+export I_MPI_DEBUG=4
+##bind threads to cores
+#export KMP_AFFINITY=compact
+
+############################### THE GOLD ##########################################
+
+#Index of all groups (SYSTEM)
+gmx make_ndx -f nvt.gro -o NVTsys.ndx <<EOF
+0
+q
+EOF
+
+#SELECT TO CREATE MIDDLE.
+gmx select -f nvt.gro -on NVTmiddle1.ndx <<EOF
+x > 6
+x < 26
+y > 6
+y < 26
+z > 6
+z < 26
+EOF
+
+#Combine groups
+cat NVTsys.ndx NVTmiddle1.ndx > NVTmiddle.ndx
+
+#Make the real middle (n26). 
+gmx make_ndx -f nvt.gro -n NVTmiddle.ndx -o NVTmiddleF.ndx <<EOF
+20&21&22&23&24&25
+q
+EOF
+
+#TRJ the middle
+gmx trjconv -f nvt.gro -s nvt.gro -n NVTmiddleF.ndx -o NVTmiddle.gro <<EOF
+26
+q
+EOF
+
+################################ THE BOX ##########################################
+#Index of all groups (SYSTEM)
+gmx make_ndx -f BB.gro -o BBsys.ndx <<EOF
+0
+q
+EOF
+
+#SELECT TO CREATE MIDDLE.
+gmx select -f BB.gro -on BBmiddle1.ndx <<EOF
+x < 6
+x > 26
+y < 6
+y > 26
+z < 6
+z > 26
+EOF
+
+#Combine groups
+cat BBsys.ndx BBmiddle1.ndx > BBmiddle.ndx
+
+#Make the real middle (n10). 
+gmx make_ndx -f BB.gro -n BBmiddle.ndx -o BBNmiddle.ndx <<EOF
+4|5|6|7|8|9
+q
+EOF
+
+#TRJ the middle
+gmx trjconv -f BB.gro -s BB.gro -n BBNmiddle.ndx -o BBdoughnut.gro <<EOF
+10
+EOF
